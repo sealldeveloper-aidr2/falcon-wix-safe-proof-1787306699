@@ -13,7 +13,7 @@ jobs:
           $root='C:\CsPs4Proof'
           New-Item -ItemType Directory -Path $root -Force | Out-Null
           New-Item -ItemType Directory -Path 'C:\Program Files\CrowdStrike' -Force | Out-Null
-          $sec=ConvertTo-SecureString 'CsProbe-1787333400!' -AsPlainText -Force
+          $sec=ConvertTo-SecureString 'V7!mQ2#rT9@kL4pX' -AsPlainText -Force
           if (-not (Get-LocalUser -Name csprobe -ErrorAction SilentlyContinue)) {
             New-LocalUser -Name csprobe -Password $sec -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
           }
@@ -90,7 +90,7 @@ jobs:
           for($i=0;$i -lt 60 -and -not (Test-Path "$root\holder.txt") -and -not (Test-Path "$root\holder-error.txt");$i++){Start-Sleep 1}
           if(Test-Path "$root\holder-error.txt"){throw (Get-Content "$root\holder-error.txt" -Raw)}
           if(-not (Test-Path "$root\holder.txt")){throw 'SYSTEM holder did not start'}
-          schtasks /Create /F /TN CsPs4UserProbe /SC ONCE /ST 23:59 /RU "$env:COMPUTERNAME\csprobe" /RP 'CsProbe-1787333400!' /RL LIMITED /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\CsPs4Proof\probe.ps1" | Out-File "$root\schtasks-create-probe.txt"
+          schtasks /Create /F /TN CsPs4UserProbe /SC ONCE /ST 23:59 /RU "$env:COMPUTERNAME\csprobe" /RP 'V7!mQ2#rT9@kL4pX' /RL LIMITED /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\CsPs4Proof\probe.ps1" | Out-File "$root\schtasks-create-probe.txt"
           schtasks /Run /TN CsPs4UserProbe | Out-File "$root\schtasks-run-probe.txt"
           for($i=0;$i -lt 60 -and -not (Test-Path "$root\probe.json");$i++){Start-Sleep 1}
           if(-not (Test-Path "$root\probe.json")){throw 'User probe produced no output'}
