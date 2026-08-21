@@ -90,9 +90,10 @@ jobs:
           for($i=0;$i -lt 60 -and -not (Test-Path "$root\holder.txt") -and -not (Test-Path "$root\holder-error.txt");$i++){Start-Sleep 1}
           if(Test-Path "$root\holder-error.txt"){throw (Get-Content "$root\holder-error.txt" -Raw)}
           if(-not (Test-Path "$root\holder.txt")){throw 'SYSTEM holder did not start'}
-          schtasks /Create /F /TN CsPs4UserProbe /SC ONCE /ST 23:59 /RU "$env:COMPUTERNAME\csprobe" /RP 'V7!mQ2#rT9@kL4pX' /RL LIMITED /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\CsPs4Proof\probe.ps1" | Out-File "$root\schtasks-create-probe.txt"
-          schtasks /Run /TN CsPs4UserProbe | Out-File "$root\schtasks-run-probe.txt"
-          for($i=0;$i -lt 60 -and -not (Test-Path "$root\probe.json");$i++){Start-Sleep 1}
+          & icacls $root /grant "csprobe:(OI)(CI)M" | Out-File "$root\proof-acl.txt"
+          $probeCred=New-Object PSCredential("$env:COMPUTERNAME\csprobe",(ConvertTo-SecureString 'V7!mQ2#rT9@kL4pX' -AsPlainText -Force))
+          $probeProc=Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\CsPs4Proof\probe.ps1' -Credential $probeCred -LoadUserProfile -Wait -PassThru
+          $probeProc.ExitCode | Set-Content "$root\probe-process-exit.txt"
           if(-not (Test-Path "$root\probe.json")){throw 'User probe produced no output'}
           Get-Content "$root\holder.txt"
           Get-Content "$root\probe.json"
