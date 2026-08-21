@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   proof:
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 20
     steps:
       - name: Download exact researcher-hosted proof ISO
