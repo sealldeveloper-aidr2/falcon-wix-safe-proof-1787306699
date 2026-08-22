@@ -11,8 +11,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force C:\rp\backend | Out-Null
-          Set-Content -NoNewline C:\rp\backend\secret.txt 'RESEARCHER_CONTROLLED_LOOPBACK_SECRET_8F6C21'
-          Set-Content -NoNewline C:\rp\backend\payload.html '<!doctype html><title>rp</title><script>document.body.innerText="RP_ORIGIN:"+location.origin</script>'
+          [IO.File]::WriteAllText('C:\rp\backend\secret.txt','RESEARCHER_CONTROLLED_LOOPBACK_SECRET_8F6C21')
+          [IO.File]::WriteAllText('C:\rp\backend\payload.html','<!doctype html><title>rp</title><body>RESEARCHER_HTML_17</body>')
           $base = 'https://kazqn-2600-1f18-68f7-2200-aca3-814e-a7a5-3b6b.free.pinggy.net'
           curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/CsReverseProxy.dll" -o C:\rp\CsReverseProxy.dll
           curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/reverseproxy_harness.exe" -o C:\rp\reverseproxy_harness.exe
@@ -42,7 +42,7 @@ jobs:
           )
           foreach($path in $paths) {
             "--- PROBE $path ---"
-            curl.exe --noproxy '*' -sS -i --max-time 15 "http://127.0.0.1:18443$path"
+            curl.exe --noproxy '*' -sS -i --max-time 15 "http://localhost:18443$path"
             "curl_exit=$LASTEXITCODE"
           }
           '--- final harness logs ---'
